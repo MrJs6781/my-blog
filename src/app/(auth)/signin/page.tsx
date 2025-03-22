@@ -20,17 +20,24 @@ export default function SignIn() {
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setIsLoading(true);
+    // setIsLoading(true);
 
     // This would typically call your API for authentication
     try {
       // Simulate API call
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
+      // await new Promise((resolve) => setTimeout(resolve, 1000));
       // Redirect to dashboard after successful login
-      router.push("/dashboard");
+      // router.push("/dashboard");
+      // Get form data
+      const formData = new FormData(e.currentTarget);
+      const email = formData.get("email") as string;
+      const password = formData.get("password") as string;
+      const remember = formData.get("remember") === "on"; // Checkbox returns "on" or null
+
+      // Log or use the data
+      console.log({ email, password, remember });
     } catch (error) {
       console.error("Login failed:", error);
     } finally {
@@ -54,6 +61,7 @@ export default function SignIn() {
               <Input
                 id="email"
                 type="email"
+                name="email"
                 placeholder="hello@example.com"
                 required
               />
@@ -68,10 +76,10 @@ export default function SignIn() {
                   Forgot password?
                 </Link>
               </div>
-              <Input id="password" type="password" required />
+              <Input id="password" type="password" name="password" required />
             </div>
             <div className="flex items-center space-x-2">
-              <Checkbox id="remember" />
+              <Checkbox id="remember" name="remember" />
               <Label htmlFor="remember" className="text-sm font-normal">
                 Remember me
               </Label>
@@ -83,7 +91,7 @@ export default function SignIn() {
 
           <div className="mt-4 text-center text-sm">
             <p>Or continue with</p>
-            <div className="mt-3 flex gap-2">
+            <div className="mt-3 flex gap-2 flex-wrap">
               <Button variant="outline" className="w-full">
                 Google
               </Button>
