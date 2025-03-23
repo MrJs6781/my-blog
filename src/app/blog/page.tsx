@@ -19,7 +19,8 @@ interface Post {
   date: string;
   author: Author;
   coverImage: string;
-  category: string;
+  featuredImage?: string;
+  category: string | { id: string; name: string; slug: string };
   tags: string[];
   readTime: string;
 }
@@ -121,10 +122,14 @@ export default function BlogPage() {
                 key={post.id}
                 className="border rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
               >
-                <Link href={`/blog/post/${post.id}`}>
+                <Link href={`/blog/post/${post.slug}`}>
                   <div className="relative h-48 w-full">
                     <Image
-                      src={post.coverImage || "/images/placeholder-cover.jpg"}
+                      src={
+                        post.coverImage ||
+                        post.featuredImage ||
+                        "/images/placeholder-cover.jpg"
+                      }
                       alt={post.title}
                       fill
                       className="object-cover"
@@ -133,7 +138,7 @@ export default function BlogPage() {
                 </Link>
 
                 <div className="p-4">
-                  <Link href={`/blog/post/${post.id}`}>
+                  <Link href={`/blog/post/${post.slug}`}>
                     <h2 className="text-xl font-semibold mb-2 hover:text-blue-600">
                       {post.title}
                     </h2>
@@ -164,7 +169,9 @@ export default function BlogPage() {
 
                   <div className="flex flex-wrap gap-1 mb-3">
                     <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
-                      {post.category}
+                      {typeof post.category === "string"
+                        ? post.category
+                        : post.category.name}
                     </span>
                     {post.tags.slice(0, 2).map((tag, index) => (
                       <span
@@ -182,7 +189,7 @@ export default function BlogPage() {
                   </div>
 
                   <Link
-                    href={`/blog/post/${post.id}`}
+                    href={`/blog/post/${post.slug}`}
                     className="text-blue-600 hover:text-blue-800 text-sm font-medium inline-flex items-center"
                   >
                     Read more

@@ -12,6 +12,8 @@ export async function GET(
     const params = await context.params;
     const slug = params.slug;
 
+    console.log(slug);
+
     // Find the post in the database
     const post = await prisma.post.findUnique({
       where: { slug },

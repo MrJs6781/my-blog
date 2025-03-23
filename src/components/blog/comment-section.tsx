@@ -14,6 +14,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import axios from "axios";
+import { useParams } from "next/navigation";
 
 interface Comment {
   id: string;
@@ -24,7 +25,8 @@ interface Comment {
     avatar?: string;
   };
   content: string;
-  date: string;
+  date?: string;
+  createdAt?: string;
   likes: number;
   isLiked?: boolean;
   replies?: Comment[];
@@ -36,10 +38,10 @@ interface CommentSectionProps {
 
 const CommentItem: FC<{
   comment: Comment;
-  postId: string;
+  postSlug: string;
   level?: number;
   onCommentAdded: () => void;
-}> = ({ comment, postId, level = 0, onCommentAdded }) => {
+}> = ({ comment, postSlug, level = 0, onCommentAdded }) => {
   const [isReplying, setIsReplying] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isLiked, setIsLiked] = useState(comment.isLiked || false);
@@ -61,7 +63,7 @@ const CommentItem: FC<{
     try {
       // Call the API to save the reply
       // In a real app, this would include proper reply nesting
-      await axios.post(`/api/auth/posts/${postId}/comments`, {
+      await axios.post(`/api/auth/posts/${postSlug}/comments`, {
         content: replyContent,
         parentId: comment.id, // This would be used in a real implementation
       });
@@ -78,12 +80,28 @@ const CommentItem: FC<{
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    }).format(date);
+    try {
+      // Check if the dateString is empty or invalid
+      if (!dateString) {
+        return "Unknown date";
+      }
+
+      const date = new Date(dateString);
+
+      // Check if date is valid
+      if (isNaN(date.getTime())) {
+        return "Unknown date";
+      }
+
+      return new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      }).format(date);
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Unknown date";
+    }
   };
 
   return (
@@ -103,7 +121,7 @@ const CommentItem: FC<{
             <div>
               <span className="font-semibold">{comment.author.name}</span>
               <span className="ml-2 text-xs text-muted-foreground">
-                {formatDate(comment.date)}
+                {formatDate(comment.date || comment.createdAt || "")}
               </span>
             </div>
 
@@ -185,7 +203,7 @@ const CommentItem: FC<{
                 <CommentItem
                   key={reply.id}
                   comment={reply}
-                  postId={postId}
+                  postSlug={postSlug}
                   level={level + 1}
                   onCommentAdded={onCommentAdded}
                 />
@@ -202,13 +220,35 @@ export const CommentSection: FC<CommentSectionProps> = ({ postId }) => {
   const [commentContent, setCommentContent] = useState("");
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const params = useParams();
+  const slug = params?.slug as string;
 
   // Fetch comments when component mounts or when comments are added/updated
   const fetchComments = async () => {
     try {
       setIsLoading(true);
-      const response = await axios.get(`/api/auth/posts/${postId}/comments`);
-      setComments(response.data.comments || []);
+      // Use the slug from URL params instead of post ID
+      const response = await axios.get(`/api/auth/posts/${slug}/comments`);
+
+      console.log("Comments API response:", response.data);
+
+      // Ensure each comment has a valid date field
+      const processedComments = (response.data.comments || []).map(
+        (comment: any) => {
+          // If comment.date is missing or invalid, set a default date
+          if (!comment.date && comment.createdAt) {
+            comment.date = comment.createdAt;
+          }
+
+          if (!comment.date) {
+            comment.date = new Date().toISOString();
+          }
+
+          return comment;
+        }
+      );
+
+      setComments(processedComments);
     } catch (error) {
       console.error("Failed to fetch comments:", error);
     } finally {
@@ -218,14 +258,14 @@ export const CommentSection: FC<CommentSectionProps> = ({ postId }) => {
 
   useEffect(() => {
     fetchComments();
-  }, [postId]);
+  }, [slug]);
 
   const handleCommentSubmit = async () => {
     if (!commentContent.trim()) return;
 
     try {
       // Call API to save the comment
-      await axios.post(`/api/auth/posts/${postId}/comments`, {
+      await axios.post(`/api/auth/posts/${slug}/comments`, {
         content: commentContent,
       });
 
@@ -276,7 +316,7 @@ export const CommentSection: FC<CommentSectionProps> = ({ postId }) => {
             <CommentItem
               key={comment.id}
               comment={comment}
-              postId={postId}
+              postSlug={slug}
               onCommentAdded={fetchComments}
             />
           ))}

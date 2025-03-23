@@ -155,7 +155,11 @@ export default function PostsPage() {
                         {post.status === "published" ? "Published" : "Draft"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{post.category}</TableCell>
+                    <TableCell>
+                      {typeof post.category === "string"
+                        ? post.category
+                        : post.category?.name || "Uncategorized"}
+                    </TableCell>
                     <TableCell>
                       {new Date(post.date).toLocaleDateString()}
                     </TableCell>

@@ -161,7 +161,11 @@ export default function PostDetails({ params }: { params: { id: string } }) {
               <span>By: {post.author.name}</span>
             </div>
             <div className="flex items-center gap-1">
-              <Badge variant="outline">{post.category}</Badge>
+              <Badge variant="outline">
+                {typeof post.category === "string"
+                  ? post.category
+                  : post.category?.name || "Uncategorized"}
+              </Badge>
             </div>
           </div>
 

@@ -5,7 +5,7 @@ import axios from "axios";
 import Image from "next/image";
 
 interface CommentsProps {
-  postId: string;
+  slug: string;
 }
 
 interface CommentAuthor {
@@ -23,7 +23,7 @@ interface Comment {
   likes: number;
 }
 
-export default function Comments({ postId }: CommentsProps) {
+export default function Comments({ slug }: CommentsProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
@@ -36,7 +36,7 @@ export default function Comments({ postId }: CommentsProps) {
         setIsLoading(true);
         setError("");
 
-        const response = await axios.get(`/api/auth/posts/${postId}/comments`);
+        const response = await axios.get(`/api/auth/posts/${slug}/comments`);
 
         if (response.data && response.data.comments) {
           setComments(response.data.comments);
@@ -49,10 +49,10 @@ export default function Comments({ postId }: CommentsProps) {
       }
     };
 
-    if (postId) {
+    if (slug) {
       fetchComments();
     }
-  }, [postId]);
+  }, [slug]);
 
   const handleSubmitComment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -69,7 +69,7 @@ export default function Comments({ postId }: CommentsProps) {
         avatar: "/images/placeholder-avatar.jpg",
       };
 
-      const response = await axios.post(`/api/auth/posts/${postId}/comments`, {
+      const response = await axios.post(`/api/auth/posts/${slug}/comments`, {
         content: newComment,
         author: mockAuthor,
       });

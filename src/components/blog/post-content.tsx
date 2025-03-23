@@ -11,6 +11,12 @@ interface Author {
   bio?: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 interface Post {
   title: string;
   content: string;
@@ -18,8 +24,9 @@ interface Post {
   lastUpdated?: string;
   readTime?: string;
   coverImage?: string;
+  featuredImage?: string;
   author?: Author;
-  category?: string;
+  category?: string | Category;
   tags?: string[];
 }
 
@@ -35,6 +42,21 @@ export const PostContent: FC<PostContentProps> = ({ post }) => {
       month: "long",
       day: "numeric",
     }).format(date);
+  };
+
+  // Get the category name
+  const getCategoryName = () => {
+    if (!post.category) return null;
+    return typeof post.category === "string"
+      ? post.category
+      : post.category.name;
+  };
+
+  // Get the image URL
+  const getImageUrl = () => {
+    return (
+      post.coverImage || post.featuredImage || "/images/placeholder-cover.jpg"
+    );
   };
 
   return (
@@ -63,14 +85,16 @@ export const PostContent: FC<PostContentProps> = ({ post }) => {
               <span>{post.readTime}</span>
             </div>
           )}
-          {post.category && <Badge variant="secondary">{post.category}</Badge>}
+          {post.category && (
+            <Badge variant="secondary">{getCategoryName()}</Badge>
+          )}
         </div>
 
         {/* Cover Image */}
-        {post.coverImage && (
+        {getImageUrl() && (
           <div className="relative mb-8 aspect-video w-full overflow-hidden rounded-lg">
             <Image
-              src={post.coverImage}
+              src={getImageUrl()}
               alt={post.title}
               fill
               className="object-cover"

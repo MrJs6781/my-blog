@@ -4,13 +4,8 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Link from "next/link";
 import Image from "next/image";
+import { useParams } from "next/navigation";
 import Comments from "./comments";
-
-interface BlogPostParams {
-  params: {
-    id: string;
-  };
-}
 
 interface Author {
   id: string;
@@ -28,18 +23,20 @@ interface Post {
   date: string;
   author: Author;
   coverImage: string;
-  category: string;
+  featuredImage?: string;
+  category: string | { id: string; name: string; slug: string };
   tags: string[];
   readTime: string;
 }
 
-export default function BlogPostPage({ params }: BlogPostParams) {
+export default function BlogPostPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Extract the ID from params
-  const id = params.id;
+  // Get params using the useParams hook which is the correct way for client components
+  const params = useParams();
+  const slug = params?.slug as string;
 
   useEffect(() => {
     const fetchPost = async () => {
@@ -47,8 +44,8 @@ export default function BlogPostPage({ params }: BlogPostParams) {
         setIsLoading(true);
         setError("");
 
-        // Fetch the post by its ID
-        const response = await axios.get(`/api/auth/posts/${id}`);
+        // Fetch the post by its slug
+        const response = await axios.get(`/api/auth/posts/${slug}`);
 
         if (response.data && response.data.post) {
           setPost(response.data.post);
@@ -63,10 +60,10 @@ export default function BlogPostPage({ params }: BlogPostParams) {
       }
     };
 
-    if (id) {
+    if (slug) {
       fetchPost();
     }
-  }, [id]);
+  }, [slug]);
 
   if (isLoading) {
     return (
@@ -137,10 +134,15 @@ export default function BlogPostPage({ params }: BlogPostParams) {
             </div>
           </div>
 
-          {post.coverImage && (
+          {/* Support both coverImage and featuredImage */}
+          {(post.coverImage || post.featuredImage) && (
             <div className="relative h-80 md:h-96 w-full mb-8">
               <Image
-                src={post.coverImage}
+                src={
+                  post.coverImage ||
+                  post.featuredImage ||
+                  "/images/placeholder-cover.jpg"
+                }
                 alt={post.title}
                 fill
                 className="object-cover rounded-lg"
@@ -150,7 +152,9 @@ export default function BlogPostPage({ params }: BlogPostParams) {
 
           <div className="flex flex-wrap gap-2 mb-4">
             <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-              {post.category}
+              {typeof post.category === "string"
+                ? post.category
+                : post.category.name}
             </span>
             {post.tags.map((tag, index) => (
               <span
@@ -194,7 +198,7 @@ export default function BlogPostPage({ params }: BlogPostParams) {
         </div>
 
         {/* Add Comments */}
-        <Comments postId={post.id} />
+        <Comments slug={post.slug} />
       </article>
     </div>
   );

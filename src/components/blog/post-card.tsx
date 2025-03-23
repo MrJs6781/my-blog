@@ -13,11 +13,12 @@ export interface PostCardProps {
     excerpt: string;
     date: string;
     coverImage?: string;
+    featuredImage?: string;
     author?: {
       name: string;
       avatar?: string;
     };
-    category?: string;
+    category?: string | { id: string; name: string; slug: string };
     readTime?: string;
     commentCount?: number;
     viewCount?: number;
@@ -35,14 +36,29 @@ export const PostCard: FC<PostCardProps> = ({ post, variant = "default" }) => {
     }).format(date);
   };
 
+  // Get category name regardless of whether it's a string or an object
+  const getCategoryName = () => {
+    if (!post.category) return null;
+    return typeof post.category === "string"
+      ? post.category
+      : post.category.name;
+  };
+
+  // Get the image URL, supporting both coverImage and featuredImage properties
+  const getImageUrl = () => {
+    return (
+      post.coverImage || post.featuredImage || "/images/placeholder-cover.jpg"
+    );
+  };
+
   if (variant === "compact") {
     return (
       <Card className="overflow-hidden transition-all hover:shadow-md">
         <Link href={`/blog/${post.slug}`} className="flex h-full">
-          {post.coverImage && (
+          {getImageUrl() && (
             <div className="relative h-full w-24 shrink-0 sm:w-32">
               <Image
-                src={post.coverImage}
+                src={getImageUrl()}
                 alt={post.title}
                 fill
                 className="object-cover"
@@ -63,10 +79,10 @@ export const PostCard: FC<PostCardProps> = ({ post, variant = "default" }) => {
   return (
     <Card className="flex h-full flex-col overflow-hidden transition-all hover:shadow-md">
       <Link href={`/blog/${post.slug}`}>
-        {post.coverImage && (
+        {getImageUrl() && (
           <div className="relative h-48 w-full">
             <Image
-              src={post.coverImage}
+              src={getImageUrl()}
               alt={post.title}
               fill
               className="object-cover"
@@ -77,7 +93,7 @@ export const PostCard: FC<PostCardProps> = ({ post, variant = "default" }) => {
       <CardContent className="flex-1 p-4 pt-5">
         {post.category && (
           <Badge className="mb-2" variant="secondary">
-            {post.category}
+            {getCategoryName()}
           </Badge>
         )}
         <Link href={`/blog/${post.slug}`}>

@@ -101,8 +101,17 @@ export async function GET(
       },
     });
 
+    // Format the comments to ensure they have proper date fields
+    const formattedComments = comments.map((comment) => ({
+      ...comment,
+      // Ensure date is in ISO format string
+      date: comment.createdAt.toISOString(),
+      // Keep createdAt as is for reference
+      likes: 0, // Default value for likes since we don't have this in the database yet
+    }));
+
     return NextResponse.json({
-      comments,
+      comments: formattedComments,
       count: comments.length,
     });
   } catch (error) {

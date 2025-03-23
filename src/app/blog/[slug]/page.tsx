@@ -23,6 +23,7 @@ import { CommentSection } from "@/components/blog/comment-section";
 import { TableOfContents } from "@/components/blog/table-of-contents";
 import axios from "axios";
 import { useParams } from "next/navigation";
+import { format } from "date-fns";
 
 // TOC items derived from the content
 const tocItems = [
@@ -48,22 +49,27 @@ interface Post {
   title: string;
   excerpt: string;
   content: string;
-  date: string;
+  createdAt: string;
   readTime: string;
   author: {
+    id: string;
     name: string;
     avatar: string;
     bio: string;
   };
-  coverImage: string;
-  category: string;
+  featuredImage: string;
+  category: {
+    id: string;
+    name: string;
+    slug: string;
+  };
   tags: string[];
   relatedPosts: {
     id: string;
     title: string;
     slug: string;
     excerpt: string;
-    coverImage: string;
+    featuredImage: string;
   }[];
 }
 
@@ -107,15 +113,20 @@ const fallbackPost = {
   <h2 id="conclusion">Conclusion</h2>
   <p>Next.js 15 represents a significant step forward in the evolution of the framework. With its focus on developer experience, performance, and seamless integration with the React ecosystem, it's an excellent choice for building modern web applications.</p>
   `,
-  date: "March 15, 2025",
+  createdAt: "2025-03-15T00:00:00.000Z",
   readTime: "5 min read",
   author: {
+    id: "1",
     name: "John Doe",
     avatar: "/images/placeholder-avatar.jpg",
     bio: "Senior Frontend Developer with a passion for React and modern web technologies.",
   },
-  coverImage: "/images/placeholder-cover.jpg",
-  category: "Development",
+  featuredImage: "/images/placeholder-cover.jpg",
+  category: {
+    id: "1",
+    name: "Development",
+    slug: "development",
+  },
   tags: ["Next.js", "React", "JavaScript"],
   relatedPosts: [
     {
@@ -124,7 +135,7 @@ const fallbackPost = {
       slug: "mastering-tailwind-css-4",
       excerpt:
         "Explore the new features in Tailwind CSS 4 and how to use them effectively.",
-      coverImage: "/images/placeholder-cover.jpg",
+      featuredImage: "/images/placeholder-cover.jpg",
     },
     {
       id: "3",
@@ -132,7 +143,7 @@ const fallbackPost = {
       slug: "building-with-typescript-and-express",
       excerpt:
         "How to create a robust backend API using TypeScript and Express.js.",
-      coverImage: "/images/placeholder-cover.jpg",
+      featuredImage: "/images/placeholder-cover.jpg",
     },
   ],
 };
@@ -190,21 +201,26 @@ export default function BlogPostPage() {
     );
   }
 
+  // Format the date
+  const formattedDate = post.createdAt
+    ? format(new Date(post.createdAt), "MMMM d, yyyy")
+    : "Unknown date";
+
   return (
     <div className="container mx-auto px-4 py-8">
       <article className="mx-auto max-w-4xl">
         {/* Header */}
         <header className="mb-8">
           <div className="mb-4 flex items-center gap-2">
-            <Link href="/blog">
+            <Link href={`/blog?category=${post.category?.slug || ""}`}>
               <Badge variant="outline" className="rounded-md">
-                {post.category}
+                {post.category?.name || "Uncategorized"}
               </Badge>
             </Link>
             <span className="text-sm text-muted-foreground">•</span>
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
               <Calendar className="h-4 w-4" />
-              {post.date}
+              {formattedDate}
             </span>
             <span className="text-sm text-muted-foreground">•</span>
             <span className="flex items-center gap-1 text-sm text-muted-foreground">
@@ -218,13 +234,15 @@ export default function BlogPostPage() {
 
           <div className="flex items-center gap-4">
             <Avatar className="h-10 w-10">
-              <AvatarImage src={post.author.avatar} alt={post.author.name} />
-              <AvatarFallback>{post.author.name.charAt(0)}</AvatarFallback>
+              <AvatarImage src={post.author?.avatar} alt={post.author?.name} />
+              <AvatarFallback>
+                {post.author?.name?.charAt(0) || "U"}
+              </AvatarFallback>
             </Avatar>
             <div>
-              <div className="font-medium">{post.author.name}</div>
+              <div className="font-medium">{post.author?.name}</div>
               <div className="text-sm text-muted-foreground">
-                {post.author.bio}
+                {post.author?.bio}
               </div>
             </div>
           </div>
@@ -233,7 +251,7 @@ export default function BlogPostPage() {
         {/* Cover image */}
         <div className="relative mb-8 aspect-video w-full overflow-hidden rounded-lg">
           <Image
-            src={post.coverImage}
+            src={post.featuredImage || "/images/placeholder-cover.jpg"}
             alt={post.title}
             fill
             className="object-cover"
@@ -299,8 +317,9 @@ export default function BlogPostPage() {
                   <h3 className="mb-4 text-lg font-semibold">Tags</h3>
                   <div className="flex flex-wrap gap-2">
                     {post.tags &&
-                      post.tags.map((tag) => (
-                        <Link key={tag} href={`/blog?tag=${tag}`}>
+                      Array.isArray(post.tags) &&
+                      post.tags.map((tag, index) => (
+                        <Link key={index} href={`/blog?tag=${tag}`}>
                           <Badge variant="secondary">{tag}</Badge>
                         </Link>
                       ))}
@@ -350,19 +369,19 @@ export default function BlogPostPage() {
                   <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
                     <Avatar className="h-16 w-16">
                       <AvatarImage
-                        src={post.author.avatar}
-                        alt={post.author.name}
+                        src={post.author?.avatar}
+                        alt={post.author?.name}
                       />
                       <AvatarFallback>
-                        {post.author.name.charAt(0)}
+                        {post.author?.name?.charAt(0) || "U"}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <h3 className="text-lg font-semibold">
-                        About {post.author.name}
+                        About {post.author?.name}
                       </h3>
                       <p className="mt-2 text-muted-foreground">
-                        {post.author.bio}
+                        {post.author?.bio}
                       </p>
                       <Button variant="link" className="mt-2 h-auto p-0">
                         View all posts
@@ -393,11 +412,15 @@ export default function BlogPostPage() {
         <h2 className="mb-6 text-2xl font-bold">Related Articles</h2>
         <div className="grid gap-6 sm:grid-cols-2">
           {post.relatedPosts &&
+            Array.isArray(post.relatedPosts) &&
             post.relatedPosts.map((relatedPost) => (
               <Card key={relatedPost.id} className="overflow-hidden">
                 <div className="relative aspect-video">
                   <Image
-                    src={relatedPost.coverImage}
+                    src={
+                      relatedPost.featuredImage ||
+                      "/images/placeholder-cover.jpg"
+                    }
                     alt={relatedPost.title}
                     fill
                     className="object-cover"
