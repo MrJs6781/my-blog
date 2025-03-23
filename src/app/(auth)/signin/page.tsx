@@ -15,34 +15,20 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/context/auth-context";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 export default function SignIn() {
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isLoading, error, clearError } = useAuth();
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    // setIsLoading(true);
-
-    // This would typically call your API for authentication
-    try {
-      // Simulate API call
-      // await new Promise((resolve) => setTimeout(resolve, 1000));
-      // Redirect to dashboard after successful login
-      // router.push("/dashboard");
-      // Get form data
-      const formData = new FormData(e.currentTarget);
-      const email = formData.get("email") as string;
-      const password = formData.get("password") as string;
-      const remember = formData.get("remember") === "on"; // Checkbox returns "on" or null
-
-      // Log or use the data
-      console.log({ email, password, remember });
-    } catch (error) {
-      console.error("Login failed:", error);
-    } finally {
-      setIsLoading(false);
-    }
+    await login(email, password);
   };
 
   return (
@@ -55,13 +41,21 @@ export default function SignIn() {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 type="email"
-                name="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
                 placeholder="hello@example.com"
                 required
               />
@@ -76,10 +70,20 @@ export default function SignIn() {
                   Forgot password?
                 </Link>
               </div>
-              <Input id="password" type="password" name="password" required />
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
             </div>
             <div className="flex items-center space-x-2">
-              <Checkbox id="remember" name="remember" />
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(checked === true)}
+              />
               <Label htmlFor="remember" className="text-sm font-normal">
                 Remember me
               </Label>
@@ -92,10 +96,10 @@ export default function SignIn() {
           <div className="mt-4 text-center text-sm">
             <p>Or continue with</p>
             <div className="mt-3 flex gap-2 flex-wrap">
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" disabled={isLoading}>
                 Google
               </Button>
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" disabled={isLoading}>
                 GitHub
               </Button>
             </div>

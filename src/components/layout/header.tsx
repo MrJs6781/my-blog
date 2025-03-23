@@ -1,123 +1,178 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { Menu, X, Sun, Moon, User } from "lucide-react";
+import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
-import { useTheme } from "next-themes";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Menu } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/context/auth-context";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const navItems = [
-  { name: "Home", href: "/" },
-  { name: "Blog", href: "/blog" },
-  { name: "About", href: "/about" },
-  { name: "Contact", href: "/contact" },
-];
-
 export default function Header() {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { setTheme } = useTheme();
+  const pathname = usePathname();
+  const { user, logout } = useAuth();
+
+  // Navigation items that are always visible
+  const navItems = [
+    { name: "Home", href: "/" },
+    { name: "Blog", href: "/blog" },
+    { name: "About", href: "/about" },
+    { name: "Contact", href: "/contact" },
+  ];
+
+  // Authenticated navigation items
+  const authNavItems = user
+    ? [
+        { name: "Dashboard", href: "/dashboard" },
+        ...(user.role === "ADMIN" ? [{ name: "Admin", href: "/admin" }] : []),
+      ]
+    : [];
+
+  // Combine all navigation items
+  const allNavItems = [...navItems, ...authNavItems];
+
+  const isActive = (path: string) => pathname === path;
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b bg-background">
-      <div className="container flex h-16 items-center justify-between px-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center space-x-2">
-          <span className="text-xl font-bold">MyBlog</span>
-        </Link>
-
-        {/* Desktop navigation */}
-        <nav className="hidden md:flex md:gap-6">
-          {navItems.map((item) => (
-            <Link
-              key={item.name}
-              href={item.href}
-              className="text-sm font-medium transition-colors hover:text-primary"
-            >
-              {item.name}
-            </Link>
-          ))}
-        </nav>
-
-        {/* Actions */}
-        <div className="flex items-center gap-2">
-          {/* Theme toggle */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9">
-                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                <span className="sr-only">Toggle theme</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => setTheme("light")}>
-                Light
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("dark")}>
-                Dark
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setTheme("system")}>
-                System
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* User menu or Sign in button */}
-          <div className="hidden md:block">
-            <Button asChild variant="ghost" size="sm">
-              <Link href="/signin" className="gap-2">
-                <User className="h-4 w-4" /> Sign In
-              </Link>
-            </Button>
-          </div>
-
-          {/* Mobile menu button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? (
-              <X className="h-6 w-6" />
-            ) : (
-              <Menu className="h-6 w-6" />
-            )}
-            <span className="sr-only">Toggle menu</span>
-          </Button>
-        </div>
-      </div>
-
-      {/* Mobile navigation */}
-      {mobileMenuOpen && (
-        <div className="md:hidden">
-          <div className="container space-y-1 px-4 pb-3 pt-2">
-            {navItems.map((item) => (
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-14 items-center">
+        <div className="mr-4 hidden md:flex">
+          <Link href="/" className="mr-6 flex items-center space-x-2">
+            <span className="hidden font-bold sm:inline-block">My Blog</span>
+          </Link>
+          <nav className="flex items-center space-x-6 text-sm font-medium">
+            {allNavItems.map((item, index) => (
               <Link
-                key={item.name}
+                key={index}
                 href={item.href}
-                className="block py-2 text-base font-medium transition-colors hover:text-primary"
-                onClick={() => setMobileMenuOpen(false)}
+                className={`transition-colors hover:text-foreground/80 ${
+                  isActive(item.href) ? "text-foreground" : "text-foreground/60"
+                }`}
               >
                 {item.name}
               </Link>
             ))}
-            <Link
-              href="/signin"
-              className="mt-4 flex items-center gap-2 py-2 text-base font-medium transition-colors hover:text-primary"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              <User className="h-4 w-4" /> Sign In
-            </Link>
-          </div>
+          </nav>
         </div>
-      )}
+
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="mr-2 md:hidden"
+              aria-label="Menu"
+            >
+              <Menu className="h-5 w-5" />
+              <span className="sr-only">Toggle Menu</span>
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="left" className="pr-0">
+            <MobileNav navItems={allNavItems} pathname={pathname} />
+          </SheetContent>
+        </Sheet>
+
+        <Link href="/" className="mr-6 flex items-center space-x-2 md:hidden">
+          <span className="font-bold">My Blog</span>
+        </Link>
+
+        <div className="flex flex-1 items-center justify-end space-x-4">
+          <nav className="flex items-center space-x-2">
+            {user ? <UserMenu user={user} logout={logout} /> : <AuthButtons />}
+            <ModeToggle />
+          </nav>
+        </div>
+      </div>
     </header>
+  );
+}
+
+function MobileNav({
+  navItems,
+  pathname,
+}: {
+  navItems: { name: string; href: string }[];
+  pathname: string;
+}) {
+  const isActive = (path: string) => pathname === path;
+
+  return (
+    <div className="grid gap-2 py-6">
+      {navItems.map((item, index) => (
+        <Link
+          key={index}
+          href={item.href}
+          className={`flex w-full items-center py-2 text-lg font-medium ${
+            isActive(item.href) ? "text-foreground" : "text-foreground/60"
+          }`}
+        >
+          {item.name}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function UserMenu({ user, logout }: { user: any; logout: () => void }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="relative h-8 w-8 rounded-full">
+          <Avatar className="h-8 w-8">
+            <AvatarImage
+              src={user.avatar || "/images/placeholder-avatar.jpg"}
+              alt={user.name}
+            />
+            <AvatarFallback>{user.name?.charAt(0) || "U"}</AvatarFallback>
+          </Avatar>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="w-56" align="end" forceMount>
+        <div className="flex flex-col space-y-1 p-2">
+          <p className="text-sm font-medium leading-none">{user.name}</p>
+          <p className="text-xs leading-none text-muted-foreground">
+            {user.email}
+          </p>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/dashboard">Dashboard</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/profile">Profile</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href="/settings">Settings</Link>
+        </DropdownMenuItem>
+        {user.role === "ADMIN" && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin">Admin</Link>
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={logout}>Log out</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function AuthButtons() {
+  return (
+    <>
+      <Button variant="ghost" size="sm" asChild>
+        <Link href="/signin">Sign in</Link>
+      </Button>
+      <Button size="sm" asChild>
+        <Link href="/signup">Sign up</Link>
+      </Button>
+    </>
   );
 }

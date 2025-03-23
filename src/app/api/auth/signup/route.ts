@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { hashPassword, generateToken, Role } from "@/lib/auth";
+import { hash } from "bcrypt";
+import { sign } from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, email, password, role = "USER" } = body;
+    const { name, email, password } = body;
 
     // Validate input
     if (!name || !email || !password) {
       return NextResponse.json(
-        { error: "Name, email and password are required" },
+        { error: "Name, email, and password are required" },
         { status: 400 }
       );
     }
@@ -27,38 +28,46 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash the password
-    const hashedPassword = await hashPassword(password);
+    // Hash password
+    const hashedPassword = await hash(password, 10);
 
-    // Create the user
+    // Create new user
     const user = await prisma.user.create({
       data: {
         name,
         email,
         password: hashedPassword,
-        role: role as Role,
-        avatar: "/images/placeholder-avatar.jpg", // Default avatar
+        role: "USER",
       },
     });
 
-    // Generate a token
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // Create token
+    const token = sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_SECRET || "fallback_secret",
+      { expiresIn: "7d" }
+    );
 
-    // Return the user without the password
-    const { password: _, ...userWithoutPassword } = user;
-
+    // Return user data (excluding password) and token
     return NextResponse.json({
-      user: userWithoutPassword,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        bio: user.bio,
+        role: user.role,
+      },
       token,
     });
   } catch (error) {
     console.error("Signup error:", error);
     return NextResponse.json(
-      { error: "Failed to create user" },
+      { error: "An error occurred during sign up" },
       { status: 500 }
     );
   }

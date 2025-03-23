@@ -1,252 +1,130 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  BarChart,
-  BookOpen,
-  FileText,
-  MessageSquare,
-  ThumbsUp,
-  User,
-  Users,
-} from "lucide-react";
-import Link from "next/link";
+"use client";
+
+import { useAuth } from "@/lib/context/auth-context";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-
-// This would come from your API in a real application
-const stats = [
-  {
-    name: "Total Posts",
-    value: "12",
-    icon: FileText,
-    change: "+2",
-    trend: "increase",
-  },
-  {
-    name: "Total Views",
-    value: "54.3K",
-    icon: BookOpen,
-    change: "+12.3%",
-    trend: "increase",
-  },
-  {
-    name: "Comments",
-    value: "234",
-    icon: MessageSquare,
-    change: "+24%",
-    trend: "increase",
-  },
-  {
-    name: "Likes",
-    value: "1.2K",
-    icon: ThumbsUp,
-    change: "+8.7%",
-    trend: "increase",
-  },
-];
-
-// Sample recent posts data
-const recentPosts = [
-  {
-    id: "1",
-    title: "Getting Started with Next.js 15",
-    date: "2 days ago",
-    views: 432,
-    comments: 23,
-    status: "published",
-  },
-  {
-    id: "2",
-    title: "The Power of TypeScript in Modern Web Development",
-    date: "5 days ago",
-    views: 856,
-    comments: 41,
-    status: "published",
-  },
-  {
-    id: "3",
-    title: "Building Responsive UIs with Tailwind CSS 4",
-    date: "1 week ago",
-    views: 1203,
-    comments: 36,
-    status: "published",
-  },
-  {
-    id: "4",
-    title: "Introduction to Express.js and Prisma",
-    date: "2 weeks ago",
-    views: 978,
-    comments: 18,
-    status: "draft",
-  },
-];
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Dashboard() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <Button asChild>
-          <Link href="/dashboard/posts/new">New Post</Link>
-        </Button>
-      </div>
+  const { user, isLoading, logout } = useAuth();
+  const router = useRouter();
 
-      {/* Stats */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {stats.map((stat) => (
-          <Card key={stat.name}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {stat.name}
-                  </p>
-                  <p className="mt-1 text-2xl font-bold">{stat.value}</p>
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push("/signin");
+    }
+  }, [user, isLoading, router]);
+
+  if (isLoading) {
+    return (
+      <div className="container py-10">
+        <div className="max-w-5xl mx-auto">
+          <Skeleton className="h-12 w-[250px] mb-6" />
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-8 w-[150px] mb-2" />
+                <Skeleton className="h-4 w-[200px]" />
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center space-x-4 mb-4">
+                  <Skeleton className="h-12 w-12 rounded-full" />
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-[150px]" />
+                    <Skeleton className="h-4 w-[100px]" />
+                  </div>
                 </div>
-                <div className="rounded-full bg-muted p-2">
-                  <stat.icon className="h-5 w-5 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container py-10">
+      <div className="max-w-5xl mx-auto">
+        <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Profile</CardTitle>
+              <CardDescription>Your account information</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center space-x-4 mb-4">
+                <Avatar className="h-12 w-12">
+                  <AvatarImage
+                    src={user?.avatar || "/images/placeholder-avatar.jpg"}
+                    alt={user?.name || "Avatar"}
+                  />
+                  <AvatarFallback>
+                    {user?.name?.charAt(0) || "U"}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-medium">{user?.name}</p>
+                  <p className="text-sm text-muted-foreground">{user?.email}</p>
                 </div>
               </div>
-              <div className="mt-4">
-                <span
-                  className={`text-xs font-medium ${
-                    stat.trend === "increase"
-                      ? "text-green-500"
-                      : "text-red-500"
-                  }`}
-                >
-                  {stat.change}
-                </span>
-                <span className="ml-1 text-xs text-muted-foreground">
-                  from last month
-                </span>
+
+              <div className="space-y-1">
+                <p className="text-sm font-medium">Role: {user?.role}</p>
+                {user?.bio && (
+                  <p className="text-sm text-muted-foreground">{user.bio}</p>
+                )}
               </div>
             </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" onClick={logout}>
+                Sign out
+              </Button>
+            </CardFooter>
           </Card>
-        ))}
-      </div>
 
-      {/* Recent Posts */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Posts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr>
-                  <th className="border-b pb-2 text-left font-medium">Post</th>
-                  <th className="border-b pb-2 text-left font-medium">Date</th>
-                  <th className="border-b pb-2 text-left font-medium">Views</th>
-                  <th className="border-b pb-2 text-left font-medium">
-                    Comments
-                  </th>
-                  <th className="border-b pb-2 text-left font-medium">
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentPosts.map((post) => (
-                  <tr key={post.id}>
-                    <td className="border-b py-3 text-left">
-                      <Link
-                        href={`/dashboard/posts/${post.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {post.title}
-                      </Link>
-                    </td>
-                    <td className="border-b py-3 text-left text-muted-foreground">
-                      {post.date}
-                    </td>
-                    <td className="border-b py-3 text-left text-muted-foreground">
-                      {post.views}
-                    </td>
-                    <td className="border-b py-3 text-left text-muted-foreground">
-                      {post.comments}
-                    </td>
-                    <td className="border-b py-3 text-left">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
-                          post.status === "published"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                            : "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
-                        }`}
-                      >
-                        {post.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="mt-4 text-center">
-            <Button variant="outline" asChild>
-              <Link href="/dashboard/posts">View All Posts</Link>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Activity</CardTitle>
+              <CardDescription>Your recent actions</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">No recent activity</p>
+            </CardContent>
+          </Card>
 
-      {/* Quick Links */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center">
-              <FileText className="h-10 w-10 text-primary" />
-              <h3 className="mt-4 font-medium">Manage Posts</h3>
-              <p className="mt-1 text-center text-sm text-muted-foreground">
-                View and edit all your blog posts
-              </p>
-              <Button variant="ghost" className="mt-4" asChild>
-                <Link href="/dashboard/posts">View Posts</Link>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Links</CardTitle>
+              <CardDescription>Frequently used pages</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="link" className="p-0 h-auto" asChild>
+                <a href="/profile">Edit Profile</a>
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center">
-              <MessageSquare className="h-10 w-10 text-primary" />
-              <h3 className="mt-4 font-medium">Manage Comments</h3>
-              <p className="mt-1 text-center text-sm text-muted-foreground">
-                Review and moderate comments
-              </p>
-              <Button variant="ghost" className="mt-4" asChild>
-                <Link href="/dashboard/comments">View Comments</Link>
+              <Button variant="link" className="p-0 h-auto" asChild>
+                <a href="/settings">Account Settings</a>
               </Button>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center">
-              <User className="h-10 w-10 text-primary" />
-              <h3 className="mt-4 font-medium">Edit Profile</h3>
-              <p className="mt-1 text-center text-sm text-muted-foreground">
-                Update your author profile
-              </p>
-              <Button variant="ghost" className="mt-4" asChild>
-                <Link href="/dashboard/profile">View Profile</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex flex-col items-center justify-center">
-              <BarChart className="h-10 w-10 text-primary" />
-              <h3 className="mt-4 font-medium">Analytics</h3>
-              <p className="mt-1 text-center text-sm text-muted-foreground">
-                View your content performance
-              </p>
-              <Button variant="ghost" className="mt-4" asChild>
-                <Link href="/dashboard/analytics">View Stats</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+              {user?.role === "ADMIN" && (
+                <Button variant="link" className="p-0 h-auto" asChild>
+                  <a href="/admin">Admin Panel</a>
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

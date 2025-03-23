@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { comparePassword, generateToken } from "@/lib/auth";
+import { compare } from "bcrypt";
+import { sign } from "jsonwebtoken";
 import { prisma } from "@/lib/prisma";
 
 export async function POST(request: NextRequest) {
@@ -28,7 +29,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check the password
-    const passwordValid = await comparePassword(password, user.password);
+    const passwordValid = await compare(password, user.password);
 
     if (!passwordValid) {
       return NextResponse.json(
@@ -37,12 +38,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate a token
-    const token = generateToken({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
+    // Create token
+    const token = sign(
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+      },
+      process.env.JWT_SECRET || "fallback_secret",
+      { expiresIn: "7d" }
+    );
 
     // Return the user without the password
     const { password: _, ...userWithoutPassword } = user;
@@ -54,7 +59,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Signin error:", error);
     return NextResponse.json(
-      { error: "Failed to authenticate user" },
+      { error: "An error occurred during sign in" },
       { status: 500 }
     );
   }
