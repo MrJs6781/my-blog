@@ -1,260 +1,172 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { PostEditor } from "@/components/blog/post-editor";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
-// This would come from your API in a real implementation
-const CATEGORIES = [
-  { id: "1", name: "Development" },
-  { id: "2", name: "Design" },
-  { id: "3", name: "Backend" },
-  { id: "4", name: "Frontend" },
-  { id: "5", name: "DevOps" },
+// Mock categories and tags that would come from an API in a real app
+const categories = [
+  { id: "development", name: "Development" },
+  { id: "design", name: "Design" },
+  { id: "backend", name: "Backend" },
+  { id: "frontend", name: "Frontend" },
+  { id: "devops", name: "DevOps" },
 ];
 
-export default function EditPost({ params }: { params: { id: string } }) {
-  const router = useRouter();
-  const postId = params.id;
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [post, setPost] = useState({
-    title: "",
-    slug: "",
-    content: "",
-    excerpt: "",
-    categoryId: "",
-    published: false,
-    coverImage: "",
-  });
+const tags = [
+  { id: "nextjs", name: "Next.js" },
+  { id: "react", name: "React" },
+  { id: "javascript", name: "JavaScript" },
+  { id: "typescript", name: "TypeScript" },
+  { id: "tailwind", name: "Tailwind CSS" },
+  { id: "css", name: "CSS" },
+  { id: "design", name: "Design" },
+  { id: "api", name: "API" },
+  { id: "express", name: "Express" },
+];
 
+export default function EditPostPage({ params }: { params: { id: string } }) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [post, setPost] = useState<any>(null);
+  const router = useRouter();
+
+  // Fetch the post data when the component mounts
   useEffect(() => {
-    // In a real app, this would fetch from your API
     const fetchPost = async () => {
       try {
-        // Simulating API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        setIsLoading(true);
+        setError(null);
 
-        // Mock data
-        setPost({
-          title: "Sample Post Title",
-          slug: "sample-post-title",
-          content:
-            "This is the full content of the blog post. It would typically be much longer and contain markdown formatting.",
-          excerpt: "This is a brief excerpt that summarizes the post content.",
-          categoryId: "1",
-          published: true,
-          coverImage: "/images/placeholder-cover.jpg",
-        });
-      } catch (error) {
-        console.error("Error fetching post:", error);
+        // Fetch post by ID
+        const response = await axios.get(`/api/auth/posts/${params.id}`);
+
+        if (response.data.post) {
+          // Format post data for the editor
+          const postData = response.data.post;
+
+          // Find category ID from name
+          const categoryId =
+            categories.find((c) => c.name === postData.category)?.id || "";
+
+          // Find tag IDs from names
+          const tagIds = postData.tags
+            .map(
+              (tagName: string) =>
+                tags.find((t) => t.name === tagName)?.id || ""
+            )
+            .filter(Boolean);
+
+          setPost({
+            ...postData,
+            categoryId,
+            tags: tagIds,
+            published: true, // Assuming fetched posts are published
+          });
+        }
+      } catch (err) {
+        console.error("Failed to fetch post:", err);
+        setError("Failed to load the post. Please try again.");
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchPost();
-  }, [postId]);
+  }, [params.id]);
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setPost((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSelectChange = (name: string, value: string) => {
-    setPost((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSwitchChange = (name: string, checked: boolean) => {
-    setPost((prev) => ({ ...prev, [name]: checked }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
-
+  const handleSave = async (postData: any) => {
     try {
-      // This would be your API call to update the post
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      setIsSubmitting(true);
+      setError(null);
 
-      // Navigate back to posts list after successful save
-      router.push("/dashboard/posts");
-    } catch (error) {
-      console.error("Error saving post:", error);
-      setIsSaving(false);
+      // Format data for API
+      const apiData = {
+        title: postData.title,
+        content: postData.content,
+        excerpt: postData.excerpt,
+        coverImage: postData.coverImage || "/images/placeholder-cover.jpg",
+        category:
+          categories.find((c) => c.id === postData.categoryId)?.name ||
+          "Uncategorized",
+        tags: postData.tags
+          .map((tagId: string) => tags.find((t) => t.id === tagId)?.name || "")
+          .filter(Boolean),
+        published: postData.published,
+      };
+
+      // Call API to update post
+      const response = await axios.put(`/api/auth/posts/${params.id}`, apiData);
+
+      // Redirect to dashboard or post view page
+      if (response.data.success) {
+        router.push(
+          postData.published
+            ? `/blog/${response.data.post.slug}`
+            : "/dashboard/posts"
+        );
+      }
+    } catch (err) {
+      console.error("Failed to update post:", err);
+      setError("Failed to update your post. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
+  };
+
+  const handlePreview = () => {
+    // In a real app, this would open a preview in a new tab or modal
+    window.open(`/blog/${post.slug}?preview=true`, "_blank");
   };
 
   if (isLoading) {
     return (
-      <div className="flex h-96 items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex justify-center py-16">
+        <p>Loading post...</p>
+      </div>
+    );
+  }
+
+  if (error || !post) {
+    return (
+      <div className="rounded-md bg-destructive/15 p-4 text-destructive">
+        {error || "Post not found"}
       </div>
     );
   }
 
   return (
-    <div className="container max-w-4xl py-6">
-      <div className="mb-6">
-        <Link
-          href="/dashboard/posts"
-          className="flex items-center text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="mr-1 h-4 w-4" />
-          Back to posts
-        </Link>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="icon" asChild>
+            <Link href="/dashboard/posts">
+              <ArrowLeft className="h-4 w-4" />
+            </Link>
+          </Button>
+          <h1 className="text-2xl font-bold">Edit Post</h1>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Edit Post</CardTitle>
-          <CardDescription>
-            Make changes to your post and save when you're done.
-          </CardDescription>
-        </CardHeader>
-        <form onSubmit={handleSubmit}>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="title">Post Title</Label>
-              <Input
-                id="title"
-                name="title"
-                value={post.title}
-                onChange={handleChange}
-                required
-              />
-            </div>
+      {error && (
+        <div className="rounded-md bg-destructive/15 p-4 text-destructive">
+          {error}
+        </div>
+      )}
 
-            <div className="space-y-2">
-              <Label htmlFor="slug">Slug</Label>
-              <Input
-                id="slug"
-                name="slug"
-                value={post.slug}
-                onChange={handleChange}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                This will be used for the URL of your post.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="excerpt">Excerpt</Label>
-              <Textarea
-                id="excerpt"
-                name="excerpt"
-                value={post.excerpt}
-                onChange={handleChange}
-                rows={2}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                A brief summary of your post.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="content">Content</Label>
-              <Textarea
-                id="content"
-                name="content"
-                value={post.content}
-                onChange={handleChange}
-                rows={12}
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Supports Markdown formatting.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={post.categoryId}
-                onValueChange={(value) =>
-                  handleSelectChange("categoryId", value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CATEGORIES.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="coverImage">Cover Image URL</Label>
-              <Input
-                id="coverImage"
-                name="coverImage"
-                value={post.coverImage}
-                onChange={handleChange}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="published"
-                checked={post.published}
-                onCheckedChange={(checked) =>
-                  handleSwitchChange("published", checked)
-                }
-              />
-              <Label htmlFor="published">Published</Label>
-            </div>
-          </CardContent>
-          <CardFooter className="flex justify-between">
-            <Button
-              variant="outline"
-              type="button"
-              onClick={() => router.push("/dashboard/posts")}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Saving...
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </Button>
-          </CardFooter>
-        </form>
-      </Card>
+      <PostEditor
+        initialData={post}
+        categories={categories}
+        tags={tags}
+        onSave={handleSave}
+        onPreview={handlePreview}
+        isSubmitting={isSubmitting}
+      />
     </div>
   );
 }

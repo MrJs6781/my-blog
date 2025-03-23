@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -18,9 +21,55 @@ import {
 } from "lucide-react";
 import { CommentSection } from "@/components/blog/comment-section";
 import { TableOfContents } from "@/components/blog/table-of-contents";
+import axios from "axios";
+import { useParams } from "next/navigation";
 
-// This would typically come from a database or API
-const post = {
+// TOC items derived from the content
+const tocItems = [
+  { id: "introduction", text: "Introduction", level: 2 },
+  { id: "installation", text: "Installation", level: 2 },
+  { id: "key-features", text: "Key Features", level: 2 },
+  { id: "improved-routing", text: "Improved Routing", level: 3 },
+  { id: "server-components", text: "Server Components", level: 3 },
+  { id: "turbopack", text: "Turbopack Improvements", level: 3 },
+  {
+    id: "performance-optimization",
+    text: "Performance Optimization",
+    level: 2,
+  },
+  { id: "image-optimization", text: "Image Optimization", level: 3 },
+  { id: "code-splitting", text: "Code Splitting", level: 3 },
+  { id: "conclusion", text: "Conclusion", level: 2 },
+];
+
+interface Post {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  date: string;
+  readTime: string;
+  author: {
+    name: string;
+    avatar: string;
+    bio: string;
+  };
+  coverImage: string;
+  category: string;
+  tags: string[];
+  relatedPosts: {
+    id: string;
+    title: string;
+    slug: string;
+    excerpt: string;
+    coverImage: string;
+  }[];
+}
+
+// Fallback post data
+const fallbackPost = {
+  id: "1",
   slug: "getting-started-with-nextjs-15",
   title: "Getting Started with Next.js 15",
   excerpt:
@@ -88,27 +137,58 @@ const post = {
   ],
 };
 
-// TOC items derived from the content
-const tocItems = [
-  { id: "introduction", text: "Introduction", level: 2 },
-  { id: "installation", text: "Installation", level: 2 },
-  { id: "key-features", text: "Key Features", level: 2 },
-  { id: "improved-routing", text: "Improved Routing", level: 3 },
-  { id: "server-components", text: "Server Components", level: 3 },
-  { id: "turbopack", text: "Turbopack Improvements", level: 3 },
-  {
-    id: "performance-optimization",
-    text: "Performance Optimization",
-    level: 2,
-  },
-  { id: "image-optimization", text: "Image Optimization", level: 3 },
-  { id: "code-splitting", text: "Code Splitting", level: 3 },
-  { id: "conclusion", text: "Conclusion", level: 2 },
-];
+export default function BlogPostPage() {
+  const params = useParams();
+  const [post, setPost] = useState<Post>(fallbackPost);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const slug = params?.slug as string;
 
-export default function BlogPostPage({ params }: { params: { slug: string } }) {
-  // In a real app, you would fetch the post based on the slug
-  // const { slug } = params;
+  useEffect(() => {
+    const fetchPostData = async () => {
+      if (!slug) return;
+
+      try {
+        setIsLoading(true);
+
+        // Use the slug-based API endpoint
+        const response = await axios.get(`/api/auth/posts/${slug}`);
+
+        if (response.data.post) {
+          setPost(response.data.post);
+        } else {
+          setError("Post not found");
+        }
+      } catch (err) {
+        console.error("Error fetching post:", err);
+        setError("Failed to load post");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchPostData();
+  }, [slug]);
+
+  if (isLoading) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center py-16">
+          <p>Loading post...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="flex justify-center py-16">
+          <p className="text-red-500">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -218,11 +298,12 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
                 <div className="mt-8">
                   <h3 className="mb-4 text-lg font-semibold">Tags</h3>
                   <div className="flex flex-wrap gap-2">
-                    {post.tags.map((tag) => (
-                      <Link key={tag} href={`/blog?tag=${tag}`}>
-                        <Badge variant="secondary">{tag}</Badge>
-                      </Link>
-                    ))}
+                    {post.tags &&
+                      post.tags.map((tag) => (
+                        <Link key={tag} href={`/blog?tag=${tag}`}>
+                          <Badge variant="secondary">{tag}</Badge>
+                        </Link>
+                      ))}
                   </div>
                 </div>
 
@@ -292,7 +373,7 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
 
                 {/* Comments section */}
                 <div className="mt-12">
-                  <CommentSection postSlug={post.slug} />
+                  <CommentSection postId={post.id} />
                 </div>
               </div>
 
@@ -311,31 +392,32 @@ export default function BlogPostPage({ params }: { params: { slug: string } }) {
       <div className="mx-auto mt-16 max-w-4xl">
         <h2 className="mb-6 text-2xl font-bold">Related Articles</h2>
         <div className="grid gap-6 sm:grid-cols-2">
-          {post.relatedPosts.map((relatedPost) => (
-            <Card key={relatedPost.id} className="overflow-hidden">
-              <div className="relative aspect-video">
-                <Image
-                  src={relatedPost.coverImage}
-                  alt={relatedPost.title}
-                  fill
-                  className="object-cover"
-                />
-              </div>
-              <div className="p-4">
-                <h3 className="mb-2 text-lg font-semibold">
-                  <Link
-                    href={`/blog/${relatedPost.slug}`}
-                    className="hover:text-primary"
-                  >
-                    {relatedPost.title}
-                  </Link>
-                </h3>
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {relatedPost.excerpt}
-                </p>
-              </div>
-            </Card>
-          ))}
+          {post.relatedPosts &&
+            post.relatedPosts.map((relatedPost) => (
+              <Card key={relatedPost.id} className="overflow-hidden">
+                <div className="relative aspect-video">
+                  <Image
+                    src={relatedPost.coverImage}
+                    alt={relatedPost.title}
+                    fill
+                    className="object-cover"
+                  />
+                </div>
+                <div className="p-4">
+                  <h3 className="mb-2 text-lg font-semibold">
+                    <Link
+                      href={`/blog/${relatedPost.slug}`}
+                      className="hover:text-primary"
+                    >
+                      {relatedPost.title}
+                    </Link>
+                  </h3>
+                  <p className="line-clamp-2 text-sm text-muted-foreground">
+                    {relatedPost.excerpt}
+                  </p>
+                </div>
+              </Card>
+            ))}
         </div>
       </div>
     </div>

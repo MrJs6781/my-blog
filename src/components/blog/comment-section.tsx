@@ -1,6 +1,6 @@
 "use client";
 
-import { FC, useState } from "react";
+import { FC, useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,22 +13,24 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import axios from "axios";
 
 interface Comment {
   id: string;
+  postId: string;
   author: {
+    id: string;
     name: string;
     avatar?: string;
   };
   content: string;
-  createdAt: string;
+  date: string;
   likes: number;
   isLiked?: boolean;
   replies?: Comment[];
 }
 
 interface CommentSectionProps {
-  comments: Comment[];
   postId: string;
 }
 
@@ -36,7 +38,8 @@ const CommentItem: FC<{
   comment: Comment;
   postId: string;
   level?: number;
-}> = ({ comment, postId, level = 0 }) => {
+  onCommentAdded: () => void;
+}> = ({ comment, postId, level = 0, onCommentAdded }) => {
   const [isReplying, setIsReplying] = useState(false);
   const [replyContent, setReplyContent] = useState("");
   const [isLiked, setIsLiked] = useState(comment.isLiked || false);
@@ -52,18 +55,26 @@ const CommentItem: FC<{
     setIsLiked((prev) => !prev);
   };
 
-  const handleReplySubmit = () => {
+  const handleReplySubmit = async () => {
     if (!replyContent.trim()) return;
 
-    // In a real app, you would call an API to save the reply
-    console.log(
-      `Replying to comment ${comment.id} on post ${postId}:`,
-      replyContent
-    );
+    try {
+      // Call the API to save the reply
+      // In a real app, this would include proper reply nesting
+      await axios.post(`/api/auth/posts/${postId}/comments`, {
+        content: replyContent,
+        parentId: comment.id, // This would be used in a real implementation
+      });
 
-    // Reset the form
-    setReplyContent("");
-    setIsReplying(false);
+      // Notify parent component to refresh comments
+      onCommentAdded();
+
+      // Reset the form
+      setReplyContent("");
+      setIsReplying(false);
+    } catch (error) {
+      console.error("Failed to post reply:", error);
+    }
   };
 
   const formatDate = (dateString: string) => {
@@ -92,7 +103,7 @@ const CommentItem: FC<{
             <div>
               <span className="font-semibold">{comment.author.name}</span>
               <span className="ml-2 text-xs text-muted-foreground">
-                {formatDate(comment.createdAt)}
+                {formatDate(comment.date)}
               </span>
             </div>
 
@@ -176,6 +187,7 @@ const CommentItem: FC<{
                   comment={reply}
                   postId={postId}
                   level={level + 1}
+                  onCommentAdded={onCommentAdded}
                 />
               ))}
             </div>
@@ -186,25 +198,52 @@ const CommentItem: FC<{
   );
 };
 
-export const CommentSection: FC<CommentSectionProps> = ({
-  comments,
-  postId,
-}) => {
+export const CommentSection: FC<CommentSectionProps> = ({ postId }) => {
   const [commentContent, setCommentContent] = useState("");
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleCommentSubmit = () => {
+  // Fetch comments when component mounts or when comments are added/updated
+  const fetchComments = async () => {
+    try {
+      setIsLoading(true);
+      const response = await axios.get(`/api/auth/posts/${postId}/comments`);
+      setComments(response.data.comments || []);
+    } catch (error) {
+      console.error("Failed to fetch comments:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchComments();
+  }, [postId]);
+
+  const handleCommentSubmit = async () => {
     if (!commentContent.trim()) return;
 
-    // In a real app, you would call an API to save the comment
-    console.log(`Adding comment to post ${postId}:`, commentContent);
+    try {
+      // Call API to save the comment
+      await axios.post(`/api/auth/posts/${postId}/comments`, {
+        content: commentContent,
+      });
 
-    // Reset the form
-    setCommentContent("");
+      // Refresh comments
+      fetchComments();
+
+      // Reset the form
+      setCommentContent("");
+    } catch (error) {
+      console.error("Failed to post comment:", error);
+    }
   };
 
   return (
     <div className="mt-12">
-      <h2 className="mb-6 text-2xl font-bold">Comments ({comments?.length})</h2>
+      <h2 className="mb-6 text-2xl font-bold">
+        Comments ({comments?.length || 0})
+      </h2>
 
       {/* Add new comment */}
       <div className="mb-8">
@@ -227,11 +266,26 @@ export const CommentSection: FC<CommentSectionProps> = ({
       <Separator className="my-6" />
 
       {/* Comments list */}
-      <div className="space-y-6">
-        {comments?.map((comment) => (
-          <CommentItem key={comment.id} comment={comment} postId={postId} />
-        ))}
-      </div>
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <p>Loading comments...</p>
+        </div>
+      ) : comments.length > 0 ? (
+        <div className="space-y-6">
+          {comments.map((comment) => (
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              postId={postId}
+              onCommentAdded={fetchComments}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="py-8 text-center text-muted-foreground">
+          <p>No comments yet. Be the first to comment!</p>
+        </div>
+      )}
     </div>
   );
 };

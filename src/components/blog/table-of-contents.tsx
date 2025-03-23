@@ -12,33 +12,42 @@ interface TocItem {
 
 interface TableOfContentsProps {
   className?: string;
+  items?: TocItem[];
 }
 
-export const TableOfContents: FC<TableOfContentsProps> = ({ className }) => {
-  const [headings, setHeadings] = useState<TocItem[]>([]);
+export const TableOfContents: FC<TableOfContentsProps> = ({
+  className,
+  items,
+}) => {
+  const [headings, setHeadings] = useState<TocItem[]>(items || []);
   const [activeId, setActiveId] = useState<string>("");
   const pathname = usePathname();
 
-  // Extract headings from the page
+  // Extract headings from the page if items are not provided
   useEffect(() => {
+    if (items) {
+      setHeadings(items);
+      return;
+    }
+
     const extractHeadings = () => {
       const headingElements = Array.from(
         document.querySelectorAll("h2, h3, h4")
       ).filter((element) => element.id);
 
-      const items: TocItem[] = headingElements.map((element) => ({
+      const extractedItems: TocItem[] = headingElements.map((element) => ({
         id: element.id,
         text: element.textContent || "",
         level: parseInt(element.tagName.substring(1)),
       }));
 
-      setHeadings(items);
+      setHeadings(extractedItems);
     };
 
     // Run after a small delay to ensure the content is rendered
     const timer = setTimeout(extractHeadings, 100);
     return () => clearTimeout(timer);
-  }, [pathname]);
+  }, [pathname, items]);
 
   // Track active heading based on scroll position
   useEffect(() => {
