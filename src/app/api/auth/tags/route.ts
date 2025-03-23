@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withAuth, Role } from "@/lib/auth";
 
 // Mock tags database - in a real app, this would be stored in a database
 export const tags = [
@@ -58,14 +60,19 @@ export const tags = [
   },
 ];
 
-// GET all tags
+// GET - fetch all tags
 export async function GET(request: NextRequest) {
   try {
-    return NextResponse.json({
-      tags,
-      count: tags.length,
+    // Fetch all tags
+    const tags = await prisma.tag.findMany({
+      orderBy: {
+        name: "asc",
+      },
     });
+
+    return NextResponse.json({ tags });
   } catch (error) {
+    console.error("Error fetching tags:", error);
     return NextResponse.json(
       { error: "Failed to fetch tags" },
       { status: 500 }
@@ -73,53 +80,60 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - create a new tag (admin only)
+// POST - create a new tag (requires AUTHOR or ADMIN role)
 export async function POST(request: NextRequest) {
-  try {
-    // In a real app, you would validate authentication and authorization here
-    // Only admin users should be able to create tags
+  return withAuth(
+    request,
+    async (req, user) => {
+      try {
+        const body = await req.json();
+        const { name, slug } = body;
 
-    const body = await request.json();
+        // Validate input
+        if (!name) {
+          return NextResponse.json(
+            { error: "Tag name is required" },
+            { status: 400 }
+          );
+        }
 
-    // Validate required fields
-    if (!body.name) {
-      return NextResponse.json(
-        { error: "Tag name is required" },
-        { status: 400 }
-      );
-    }
+        // Create slug from name if not provided
+        const tagSlug = slug || name.toLowerCase().replace(/\s+/g, "-");
 
-    // Create slug from name if not provided
-    const slug = body.slug || body.name.toLowerCase().replace(/\s+/g, "-");
+        // Check if tag already exists
+        const existingTag = await prisma.tag.findFirst({
+          where: {
+            OR: [{ name }, { slug: tagSlug }],
+          },
+        });
 
-    // Check if tag with this slug already exists
-    if (tags.some((tag) => tag.slug === slug)) {
-      return NextResponse.json(
-        { error: "Tag with this slug already exists" },
-        { status: 400 }
-      );
-    }
+        if (existingTag) {
+          return NextResponse.json(
+            { error: "Tag with this name or slug already exists" },
+            { status: 409 }
+          );
+        }
 
-    // Create new tag
-    const newTag = {
-      id: slug,
-      name: body.name,
-      slug: slug,
-      count: 0,
-      ...body,
-    };
+        // Create the tag
+        const tag = await prisma.tag.create({
+          data: {
+            name,
+            slug: tagSlug,
+          },
+        });
 
-    // In a real app, you would save to database here
-    tags.push(newTag);
-
-    return NextResponse.json({
-      success: true,
-      tag: newTag,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to create tag" },
-      { status: 500 }
-    );
-  }
+        return NextResponse.json({
+          success: true,
+          tag,
+        });
+      } catch (error) {
+        console.error("Error creating tag:", error);
+        return NextResponse.json(
+          { error: "Failed to create tag" },
+          { status: 500 }
+        );
+      }
+    },
+    [Role.AUTHOR, Role.ADMIN]
+  );
 }

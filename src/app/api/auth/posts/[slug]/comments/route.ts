@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withAuth } from "@/lib/auth";
 
 // Mock comments database - in a real app, this would be stored in a database
 const comments = [
@@ -73,22 +75,38 @@ export async function GET(
     const params = await context.params;
     const slug = params.slug;
 
-    const postId = getPostIdFromSlug(slug);
+    // Find the post
+    const post = await prisma.post.findUnique({
+      where: { slug },
+    });
 
-    if (!postId) {
+    if (!post) {
       return NextResponse.json({ error: "Post not found" }, { status: 404 });
     }
 
-    // Filter comments by post ID
-    const postComments = comments.filter(
-      (comment) => comment.postId === postId
-    );
+    // Fetch the comments for this post
+    const comments = await prisma.comment.findMany({
+      where: { postId: post.id },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
 
     return NextResponse.json({
-      comments: postComments,
-      count: postComments.length,
+      comments,
+      count: comments.length,
     });
   } catch (error) {
+    console.error("Error fetching comments:", error);
     return NextResponse.json(
       { error: "Failed to fetch comments" },
       { status: 500 }
@@ -96,60 +114,64 @@ export async function GET(
   }
 }
 
-// POST - add a new comment to a post
+// POST - add a new comment to a post (requires authentication)
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ slug: string }> | { slug: string } }
 ) {
-  try {
-    // Handle params as a Promise in newer Next.js versions
-    const params = await context.params;
-    const slug = params.slug;
+  return withAuth(request, async (req, user) => {
+    try {
+      // Handle params as a Promise in newer Next.js versions
+      const params = await context.params;
+      const slug = params.slug;
 
-    const postId = getPostIdFromSlug(slug);
+      // Find the post
+      const post = await prisma.post.findUnique({
+        where: { slug },
+      });
 
-    if (!postId) {
-      return NextResponse.json({ error: "Post not found" }, { status: 404 });
-    }
+      if (!post) {
+        return NextResponse.json({ error: "Post not found" }, { status: 404 });
+      }
 
-    const body = await request.json();
+      const body = await req.json();
 
-    // Validate required fields
-    if (!body.content) {
+      // Validate required fields
+      if (!body.content) {
+        return NextResponse.json(
+          { error: "Comment content is required" },
+          { status: 400 }
+        );
+      }
+
+      // Create a new comment
+      const comment = await prisma.comment.create({
+        data: {
+          content: body.content,
+          postId: post.id,
+          authorId: user.id,
+        },
+        include: {
+          author: {
+            select: {
+              id: true,
+              name: true,
+              avatar: true,
+            },
+          },
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
+        comment,
+      });
+    } catch (error) {
+      console.error("Error adding comment:", error);
       return NextResponse.json(
-        { error: "Comment content is required" },
-        { status: 400 }
+        { error: "Failed to add comment" },
+        { status: 500 }
       );
     }
-
-    // In a real app, you would get the current user info from an auth token
-    const mockUser = {
-      id: "current-user",
-      name: "Current User",
-      avatar: "/images/placeholder-avatar.jpg",
-    };
-
-    // Create a new comment
-    const newComment = {
-      id: (comments.length + 1).toString(),
-      postId,
-      author: mockUser,
-      content: body.content,
-      date: new Date().toISOString(),
-      likes: 0,
-    };
-
-    // Add to the comments array (in a real app, save to database)
-    comments.push(newComment);
-
-    return NextResponse.json({
-      success: true,
-      comment: newComment,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to add comment" },
-      { status: 500 }
-    );
-  }
+  });
 }

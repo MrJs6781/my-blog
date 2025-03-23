@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { withAuth, Role } from "@/lib/auth";
 
 // Mock database - in a real app, this would be replaced with your database connection
 export const posts = [
@@ -184,35 +186,98 @@ npm install -D typescript @types/express ts-node</code></pre>
   },
 ];
 
-// GET all posts
+// GET - fetch all posts with pagination and filtering
 export async function GET(request: NextRequest) {
   try {
-    // Get query parameters
-    const url = new URL(request.url);
-    const limit = parseInt(url.searchParams.get("limit") || "10");
-    const page = parseInt(url.searchParams.get("page") || "1");
-    const category = url.searchParams.get("category");
+    const { searchParams } = new URL(request.url);
 
-    // Filter and paginate posts
-    let filteredPosts = [...posts];
+    // Pagination parameters
+    const page = parseInt(searchParams.get("page") || "1");
+    const limit = parseInt(searchParams.get("limit") || "10");
+    const category = searchParams.get("category");
+    const tag = searchParams.get("tag");
+    const authorId = searchParams.get("author");
+
+    // Calculate offset
+    const skip = (page - 1) * limit;
+
+    // Build where conditions
+    const where: any = {
+      published: true,
+    };
 
     if (category) {
-      filteredPosts = filteredPosts.filter(
-        (post) => post.category === category
-      );
+      where.category = {
+        slug: category,
+      };
     }
 
-    const startIndex = (page - 1) * limit;
-    const endIndex = page * limit;
-    const paginatedPosts = filteredPosts.slice(startIndex, endIndex);
+    if (tag) {
+      where.tags = {
+        some: {
+          tag: {
+            slug: tag,
+          },
+        },
+      };
+    }
+
+    if (authorId) {
+      where.authorId = authorId;
+    }
+
+    // Fetch posts with pagination
+    const posts = await prisma.post.findMany({
+      where,
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            avatar: true,
+            bio: true,
+          },
+        },
+        category: true,
+        tags: {
+          include: {
+            tag: true,
+          },
+        },
+      },
+      skip,
+      take: limit,
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    // Format posts for response
+    const formattedPosts = posts.map((post: any) => {
+      return {
+        ...post,
+        tags: post.tags.map((t: any) => t.tag.name),
+      };
+    });
+
+    // Get total count
+    const total = await prisma.post.count({ where });
+
+    // Calculate total pages
+    const totalPages = Math.ceil(total / limit);
 
     return NextResponse.json({
-      posts: paginatedPosts,
-      totalPosts: filteredPosts.length,
-      currentPage: page,
-      totalPages: Math.ceil(filteredPosts.length / limit),
+      posts: formattedPosts,
+      meta: {
+        total,
+        page,
+        limit,
+        totalPages,
+      },
     });
   } catch (error) {
+    console.error("Error fetching posts:", error);
     return NextResponse.json(
       { error: "Failed to fetch posts" },
       { status: 500 }
@@ -220,52 +285,87 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - create a new post
+// POST - create a new post (requires authentication and AUTHOR or ADMIN role)
 export async function POST(request: NextRequest) {
-  try {
-    // In a real app, you would validate authentication here
+  return withAuth(
+    request,
+    async (req, user) => {
+      try {
+        // Check if body is valid
+        const body = await req.json();
+        const { title, content, excerpt, slug, categoryId, tags } = body;
 
-    const body = await request.json();
+        // Validate required fields
+        if (!title || !content || !excerpt || !slug) {
+          return NextResponse.json(
+            { error: "Title, content, excerpt, and slug are required" },
+            { status: 400 }
+          );
+        }
 
-    // Validate required fields
-    if (!body.title || !body.content) {
-      return NextResponse.json(
-        { error: "Title and content are required" },
-        { status: 400 }
-      );
-    }
+        // Create the post
+        const post = await prisma.post.create({
+          data: {
+            title,
+            content,
+            excerpt,
+            slug,
+            categoryId,
+            authorId: user.id,
+            readTime: calculateReadTime(content),
+            featuredImage:
+              body.featuredImage || "/images/placeholder-cover.jpg",
+          },
+        });
 
-    // Create a new post (mock implementation)
-    const newPost = {
-      id: (posts.length + 1).toString(),
-      slug: body.title.toLowerCase().replace(/\s+/g, "-"),
-      date: new Date().toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-      author: {
-        id: "1",
-        name: "John Doe",
-        avatar: "/images/placeholder-avatar.jpg",
-        bio: "Senior Frontend Developer with a passion for React and modern web technologies.",
-      },
-      readTime: `${Math.ceil(body.content.length / 1000)} min read`,
-      relatedPosts: [],
-      ...body,
-    };
+        // Add tags if provided
+        if (tags && Array.isArray(tags) && tags.length > 0) {
+          // Process each tag
+          for (const tagName of tags) {
+            // Find or create the tag
+            let tag = await prisma.tag.findUnique({
+              where: { name: tagName },
+            });
 
-    // In a real app, you would save to database here
-    posts.push(newPost);
+            if (!tag) {
+              tag = await prisma.tag.create({
+                data: {
+                  name: tagName,
+                  slug: tagName.toLowerCase().replace(/\s+/g, "-"),
+                },
+              });
+            }
 
-    return NextResponse.json({
-      success: true,
-      post: newPost,
-    });
-  } catch (error) {
-    return NextResponse.json(
-      { error: "Failed to create post" },
-      { status: 500 }
-    );
-  }
+            // Link the tag to the post
+            await prisma.tagsOnPosts.create({
+              data: {
+                postId: post.id,
+                tagId: tag.id,
+              },
+            });
+          }
+        }
+
+        return NextResponse.json({
+          success: true,
+          post,
+        });
+      } catch (error) {
+        console.error("Error creating post:", error);
+        return NextResponse.json(
+          { error: "Failed to create post" },
+          { status: 500 }
+        );
+      }
+    },
+    [Role.AUTHOR, Role.ADMIN]
+  );
+}
+
+// Helper function to calculate read time
+function calculateReadTime(content: string): string {
+  const wordsPerMinute = 200;
+  const wordCount = content.split(/\s+/).length;
+  const readTime = Math.ceil(wordCount / wordsPerMinute);
+  return `${readTime} min read`;
 }
