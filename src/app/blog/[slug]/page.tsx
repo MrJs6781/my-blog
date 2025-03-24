@@ -6,7 +6,14 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Calendar,
@@ -18,12 +25,21 @@ import {
   Facebook,
   Twitter,
   Linkedin,
+  CalendarIcon,
+  ChevronLeft,
+  Tag,
+  User,
 } from "lucide-react";
 import { CommentSection } from "@/components/blog/comment-section";
 import { TableOfContents } from "@/components/blog/table-of-contents";
 import axios from "axios";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/lib/context/auth-context";
+import { useToast } from "@/components/ui/use-toast";
+import { PostWithRelations } from "@/lib/models/post";
 
 // TOC items derived from the content
 const tocItems = [
@@ -43,405 +59,392 @@ const tocItems = [
   { id: "conclusion", text: "Conclusion", level: 2 },
 ];
 
-interface Post {
+interface Comment {
   id: string;
-  slug: string;
-  title: string;
-  excerpt: string;
   content: string;
-  createdAt: string;
-  readTime: string;
-  author: {
+  created_at: string;
+  user: {
     id: string;
     name: string;
-    avatar: string;
-    bio: string;
+    image?: string;
   };
-  featuredImage: string;
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-  };
-  tags: string[];
-  relatedPosts: {
-    id: string;
-    title: string;
-    slug: string;
-    excerpt: string;
-    featuredImage: string;
-  }[];
 }
-
-// Fallback post data
-const fallbackPost = {
-  id: "1",
-  slug: "getting-started-with-nextjs-15",
-  title: "Getting Started with Next.js 15",
-  excerpt:
-    "Learn how to build modern web applications with Next.js 15 and its new features.",
-  content: `
-  <h2 id="introduction">Introduction</h2>
-  <p>Next.js 15 brings significant improvements to the React framework, making it even more powerful for building modern web applications. In this article, we'll explore the new features and how to leverage them in your projects.</p>
-  
-  <h2 id="installation">Installation</h2>
-  <p>Getting started with Next.js 15 is straightforward. You can create a new project using the following command:</p>
-  <pre><code>npx create-next-app@latest my-app</code></pre>
-  <p>This will set up a new Next.js project with all the latest features and configurations.</p>
-  
-  <h2 id="key-features">Key Features</h2>
-  <p>Next.js 15 introduces several exciting features that improve developer experience and application performance:</p>
-  
-  <h3 id="improved-routing">Improved Routing</h3>
-  <p>The App Router has been refined with better error handling and improved nested routing capabilities. This makes creating complex application structures more intuitive than ever.</p>
-  
-  <h3 id="server-components">Server Components</h3>
-  <p>React Server Components are now fully integrated into Next.js, allowing you to build applications that combine the interactivity of client-side apps with the performance benefits of server rendering.</p>
-  
-  <h3 id="turbopack">Turbopack Improvements</h3>
-  <p>The new version includes significant improvements to Turbopack, making development even faster with quicker refresh times and optimized builds.</p>
-  
-  <h2 id="performance-optimization">Performance Optimization</h2>
-  <p>Next.js 15 places a strong emphasis on performance optimization. Here are some techniques you can use to ensure your application runs smoothly:</p>
-  
-  <h3 id="image-optimization">Image Optimization</h3>
-  <p>The Image component has been enhanced to provide better performance with improved loading strategies and optimization algorithms.</p>
-  
-  <h3 id="code-splitting">Code Splitting</h3>
-  <p>Next.js automatically splits your code to ensure that only the necessary JavaScript is loaded for each page, significantly improving load times.</p>
-  
-  <h2 id="conclusion">Conclusion</h2>
-  <p>Next.js 15 represents a significant step forward in the evolution of the framework. With its focus on developer experience, performance, and seamless integration with the React ecosystem, it's an excellent choice for building modern web applications.</p>
-  `,
-  createdAt: "2025-03-15T00:00:00.000Z",
-  readTime: "5 min read",
-  author: {
-    id: "1",
-    name: "John Doe",
-    avatar: "/images/placeholder-avatar.jpg",
-    bio: "Senior Frontend Developer with a passion for React and modern web technologies.",
-  },
-  featuredImage: "/images/placeholder-cover.jpg",
-  category: {
-    id: "1",
-    name: "Development",
-    slug: "development",
-  },
-  tags: ["Next.js", "React", "JavaScript"],
-  relatedPosts: [
-    {
-      id: "2",
-      title: "Mastering Tailwind CSS 4",
-      slug: "mastering-tailwind-css-4",
-      excerpt:
-        "Explore the new features in Tailwind CSS 4 and how to use them effectively.",
-      featuredImage: "/images/placeholder-cover.jpg",
-    },
-    {
-      id: "3",
-      title: "Building with TypeScript and Express",
-      slug: "building-with-typescript-and-express",
-      excerpt:
-        "How to create a robust backend API using TypeScript and Express.js.",
-      featuredImage: "/images/placeholder-cover.jpg",
-    },
-  ],
-};
 
 export default function BlogPostPage() {
   const params = useParams();
-  const [post, setPost] = useState<Post>(fallbackPost);
+  const router = useRouter();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const slug = params.slug as string;
+
+  const [post, setPost] = useState<PostWithRelations | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const slug = params?.slug as string;
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
+  const [relatedPosts, setRelatedPosts] = useState<PostWithRelations[]>([]);
 
+  // Fetch post data
   useEffect(() => {
-    const fetchPostData = async () => {
+    async function fetchPost() {
       if (!slug) return;
 
+      setIsLoading(true);
       try {
-        setIsLoading(true);
-
-        // Use the slug-based API endpoint
-        const response = await axios.get(`/api/auth/posts/${slug}`);
-
-        if (response.data.post) {
-          setPost(response.data.post);
-        } else {
-          setError("Post not found");
+        // Fetch post details
+        const postResponse = await fetch(`/api/posts/by-slug/${slug}`);
+        if (!postResponse.ok) {
+          if (postResponse.status === 404) {
+            throw new Error("Post not found");
+          }
+          throw new Error("Failed to fetch post");
         }
-      } catch (err) {
+
+        const postData = await postResponse.json();
+        setPost(postData.post);
+
+        // Fetch comments for this post
+        const commentsResponse = await fetch(
+          `/api/comments?post_id=${postData.post.id}`
+        );
+        if (commentsResponse.ok) {
+          const commentsData = await commentsResponse.json();
+          setComments(commentsData.comments || []);
+        }
+
+        // Fetch related posts (same category or tags)
+        if (postData.post.category_id) {
+          const relatedResponse = await fetch(
+            `/api/posts?category_id=${postData.post.category_id}&limit=3&exclude=${postData.post.id}`
+          );
+          if (relatedResponse.ok) {
+            const relatedData = await relatedResponse.json();
+            setRelatedPosts(relatedData.posts || []);
+          }
+        }
+      } catch (err: any) {
         console.error("Error fetching post:", err);
-        setError("Failed to load post");
+        setError(err.message || "Failed to load the post");
       } finally {
         setIsLoading(false);
       }
-    };
+    }
 
-    fetchPostData();
+    fetchPost();
   }, [slug]);
+
+  const handleCommentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!user) {
+      toast({
+        title: "Please sign in",
+        description: "You must be signed in to leave a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!commentText.trim()) {
+      toast({
+        title: "Comment is empty",
+        description: "Please enter a comment",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmittingComment(true);
+
+    try {
+      const response = await fetch("/api/comments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          post_id: post?.id,
+          content: commentText,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to submit comment");
+      }
+
+      const data = await response.json();
+
+      // Add new comment to the list
+      setComments([...comments, data.comment]);
+      setCommentText("");
+
+      toast({
+        title: "Comment added",
+        description: "Your comment has been posted successfully",
+      });
+    } catch (err) {
+      console.error("Error submitting comment:", err);
+      toast({
+        title: "Error",
+        description: "Failed to submit your comment. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmittingComment(false);
+    }
+  };
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center py-16">
-          <p>Loading post...</p>
+      <div className="container py-10">
+        <div className="max-w-4xl mx-auto">
+          <Skeleton className="h-8 w-64 mb-2" />
+          <Skeleton className="h-4 w-32 mb-6" />
+          <Skeleton className="h-64 w-full mb-6" />
+          <Skeleton className="h-4 w-full mb-2" />
+          <Skeleton className="h-4 w-full mb-2" />
+          <Skeleton className="h-4 w-3/4 mb-8" />
+          <Skeleton className="h-32 w-full" />
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !post) {
     return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="flex justify-center py-16">
-          <p className="text-red-500">{error}</p>
+      <div className="container py-10">
+        <div className="max-w-2xl mx-auto text-center">
+          <h1 className="text-3xl font-bold mb-4">
+            {error === "Post not found" ? "Post Not Found" : "Error"}
+          </h1>
+          <p className="text-muted-foreground mb-6">
+            {error || "We couldn't find the post you're looking for."}
+          </p>
+          <Button onClick={() => router.push("/blog")}>
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back to Blog
+          </Button>
         </div>
       </div>
     );
   }
-
-  // Format the date
-  const formattedDate = post.createdAt
-    ? format(new Date(post.createdAt), "MMMM d, yyyy")
-    : "Unknown date";
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <article className="mx-auto max-w-4xl">
-        {/* Header */}
-        <header className="mb-8">
-          <div className="mb-4 flex items-center gap-2">
-            <Link href={`/blog?category=${post.category?.slug || ""}`}>
-              <Badge variant="outline" className="rounded-md">
-                {post.category?.name || "Uncategorized"}
-              </Badge>
+    <div className="container py-10">
+      <div className="max-w-4xl mx-auto">
+        <Button
+          variant="ghost"
+          className="mb-4"
+          onClick={() => router.push("/blog")}
+        >
+          <ChevronLeft className="mr-2 h-4 w-4" />
+          Back to Blog
+        </Button>
+
+        {/* Post Header */}
+        <div className="mb-8">
+          {post.category && (
+            <Link
+              href={`/blog?category=${post.category.id}`}
+              className="text-sm font-medium text-primary hover:underline"
+            >
+              {post.category.name}
             </Link>
-            <span className="text-sm text-muted-foreground">•</span>
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Calendar className="h-4 w-4" />
-              {formattedDate}
-            </span>
-            <span className="text-sm text-muted-foreground">•</span>
-            <span className="flex items-center gap-1 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              {post.readTime}
-            </span>
-          </div>
+          )}
+          <h1 className="text-3xl md:text-4xl font-bold mt-2 mb-4">
+            {post.title}
+          </h1>
 
-          <h1 className="mb-4 text-4xl font-bold md:text-5xl">{post.title}</h1>
-          <p className="mb-6 text-xl text-muted-foreground">{post.excerpt}</p>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground mb-6">
+            <div className="flex items-center">
+              <User className="h-4 w-4 mr-1" />
+              <span>{post.author?.name || "Anonymous"}</span>
+            </div>
 
-          <div className="flex items-center gap-4">
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={post.author?.avatar} alt={post.author?.name} />
-              <AvatarFallback>
-                {post.author?.name?.charAt(0) || "U"}
-              </AvatarFallback>
-            </Avatar>
-            <div>
-              <div className="font-medium">{post.author?.name}</div>
-              <div className="text-sm text-muted-foreground">
-                {post.author?.bio}
+            <div className="flex items-center">
+              <CalendarIcon className="h-4 w-4 mr-1" />
+              <span>
+                {new Date(
+                  post.published_at || post.created_at || ""
+                ).toLocaleDateString()}
+              </span>
+            </div>
+
+            {post.reading_time && (
+              <div className="flex items-center">
+                <Clock className="h-4 w-4 mr-1" />
+                <span>{post.reading_time} min read</span>
               </div>
+            )}
+
+            <div className="flex items-center">
+              <MessageSquare className="h-4 w-4 mr-1" />
+              <span>{comments.length} comments</span>
             </div>
           </div>
-        </header>
 
-        {/* Cover image */}
-        <div className="relative mb-8 aspect-video w-full overflow-hidden rounded-lg">
-          <Image
-            src={post.featuredImage || "/images/placeholder-cover.jpg"}
-            alt={post.title}
-            fill
-            className="object-cover"
-            priority
-          />
+          {/* Featured Image */}
+          {post.featured_image && (
+            <div className="aspect-video w-full overflow-hidden rounded-lg mb-8">
+              <img
+                src={post.featured_image}
+                alt={post.title}
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
         </div>
 
-        <div className="flex flex-col gap-8 lg:flex-row">
-          {/* Social sharing sidebar */}
-          <div className="hidden lg:block">
-            <div className="sticky top-24 flex flex-col items-center gap-4 pt-4">
-              <Button variant="outline" size="icon" aria-label="Like">
-                <ThumbsUp className="h-5 w-5" />
-              </Button>
-              <Button variant="outline" size="icon" aria-label="Comment">
-                <MessageSquare className="h-5 w-5" />
-              </Button>
-              <Button variant="outline" size="icon" aria-label="Share">
-                <Share2 className="h-5 w-5" />
-              </Button>
-              <Button variant="outline" size="icon" aria-label="Bookmark">
-                <Bookmark className="h-5 w-5" />
-              </Button>
+        {/* Post Content */}
+        <div className="prose prose-lg dark:prose-invert max-w-none mb-12">
+          <div dangerouslySetInnerHTML={{ __html: post.content }} />
+        </div>
 
-              <Separator className="my-2 w-full" />
-
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Share on Facebook"
-              >
-                <Facebook className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Share on Twitter"
-              >
-                <Twitter className="h-5 w-5" />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Share on LinkedIn"
-              >
-                <Linkedin className="h-5 w-5" />
-              </Button>
+        {/* Tags */}
+        {post.tags && post.tags.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-2">Tags</h3>
+            <div className="flex flex-wrap gap-2">
+              {post.tags.map((tag: any) => (
+                <Button key={tag.id} variant="outline" size="sm" asChild>
+                  <Link
+                    href={`/blog?tag=${tag.id}`}
+                    className="flex items-center"
+                  >
+                    <Tag className="h-3.5 w-3.5 mr-1" />
+                    {tag.name}
+                  </Link>
+                </Button>
+              ))}
             </div>
           </div>
+        )}
 
-          {/* Main content */}
-          <div className="flex-1">
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-              {/* Article content */}
-              <div className="lg:col-span-3">
-                <div
-                  className="prose prose-lg max-w-none dark:prose-invert"
-                  dangerouslySetInnerHTML={{ __html: post.content }}
-                />
+        <Separator className="my-8" />
 
-                {/* Tags */}
-                <div className="mt-8">
-                  <h3 className="mb-4 text-lg font-semibold">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {post.tags &&
-                      Array.isArray(post.tags) &&
-                      post.tags.map((tag, index) => (
-                        <Link key={index} href={`/blog?tag=${tag}`}>
-                          <Badge variant="secondary">{tag}</Badge>
-                        </Link>
-                      ))}
+        {/* Author Bio */}
+        {post.author && (
+          <div className="mb-8">
+            <h3 className="text-lg font-semibold mb-4">About the Author</h3>
+            <Card>
+              <CardContent className="p-6">
+                <div className="flex items-start gap-4">
+                  <Avatar className="h-12 w-12">
+                    <AvatarImage
+                      src={post.author.image}
+                      alt={post.author.name}
+                    />
+                    <AvatarFallback>
+                      {post.author.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h4 className="text-lg font-medium">{post.author.name}</h4>
+                    <p className="text-muted-foreground mt-1">
+                      {"Author at My Blog"}
+                    </p>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
-                {/* Share buttons (mobile) */}
-                <div className="mt-8 flex items-center justify-between border-y py-4 lg:hidden">
-                  <div className="flex items-center gap-3">
-                    <Button variant="outline" size="icon" aria-label="Like">
-                      <ThumbsUp className="h-5 w-5" />
-                    </Button>
-                    <Button variant="outline" size="icon" aria-label="Comment">
-                      <MessageSquare className="h-5 w-5" />
-                    </Button>
-                    <Button variant="outline" size="icon" aria-label="Bookmark">
-                      <Bookmark className="h-5 w-5" />
-                    </Button>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="Share on Facebook"
-                    >
-                      <Facebook className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="Share on Twitter"
-                    >
-                      <Twitter className="h-5 w-5" />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      aria-label="Share on LinkedIn"
-                    >
-                      <Linkedin className="h-5 w-5" />
-                    </Button>
-                  </div>
-                </div>
+        {/* Comments Section */}
+        <div className="mb-8">
+          <h3 className="text-lg font-semibold mb-4">
+            Comments ({comments.length})
+          </h3>
 
-                {/* Author bio */}
-                <div className="mt-8 rounded-lg bg-muted p-6">
-                  <div className="flex flex-col items-center gap-4 text-center sm:flex-row sm:text-left">
-                    <Avatar className="h-16 w-16">
-                      <AvatarImage
-                        src={post.author?.avatar}
-                        alt={post.author?.name}
-                      />
-                      <AvatarFallback>
-                        {post.author?.name?.charAt(0) || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        About {post.author?.name}
-                      </h3>
-                      <p className="mt-2 text-muted-foreground">
-                        {post.author?.bio}
-                      </p>
-                      <Button variant="link" className="mt-2 h-auto p-0">
-                        View all posts
-                      </Button>
+          {/* Comment Form */}
+          <form onSubmit={handleCommentSubmit} className="mb-6">
+            <Textarea
+              placeholder="Leave a comment..."
+              className="mb-3 min-h-24"
+              value={commentText}
+              onChange={(e) => setCommentText(e.target.value)}
+              disabled={!user || isSubmittingComment}
+            />
+            <div className="flex justify-end">
+              <Button type="submit" disabled={!user || isSubmittingComment}>
+                {isSubmittingComment ? "Posting..." : "Post Comment"}
+              </Button>
+            </div>
+          </form>
+
+          {/* Comment List */}
+          {comments.length > 0 ? (
+            <div className="space-y-4">
+              {comments.map((comment) => (
+                <Card key={comment.id}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage
+                          src={comment.user.image}
+                          alt={comment.user.name}
+                        />
+                        <AvatarFallback>
+                          {comment.user.name.charAt(0)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <CardTitle className="text-base">
+                          {comment.user.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {new Date(comment.created_at).toLocaleDateString()}
+                        </CardDescription>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </CardHeader>
+                  <CardContent>
+                    <p>{comment.content}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-6">
+              No comments yet. Be the first to share your thoughts!
+            </p>
+          )}
+        </div>
 
-                {/* Comments section */}
-                <div className="mt-12">
-                  <CommentSection postId={post.id} />
-                </div>
-              </div>
-
-              {/* Table of contents */}
-              <div className="hidden lg:block">
-                <div className="sticky top-24">
-                  <TableOfContents items={tocItems} />
-                </div>
-              </div>
+        {/* Related Posts */}
+        {relatedPosts.length > 0 && (
+          <div>
+            <h3 className="text-lg font-semibold mb-4">Related Posts</h3>
+            <div className="grid gap-4 md:grid-cols-3">
+              {relatedPosts.map((relatedPost) => (
+                <Card key={relatedPost.id}>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base line-clamp-2">
+                      <Link
+                        href={`/blog/${relatedPost.slug}`}
+                        className="hover:underline"
+                      >
+                        {relatedPost.title}
+                      </Link>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {relatedPost.excerpt ||
+                        relatedPost.content.substring(0, 100) + "..."}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="pt-0">
+                    <Button variant="link" className="p-0" asChild>
+                      <Link href={`/blog/${relatedPost.slug}`}>Read more</Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))}
             </div>
           </div>
-        </div>
-      </article>
-
-      {/* Related posts */}
-      <div className="mx-auto mt-16 max-w-4xl">
-        <h2 className="mb-6 text-2xl font-bold">Related Articles</h2>
-        <div className="grid gap-6 sm:grid-cols-2">
-          {post.relatedPosts &&
-            Array.isArray(post.relatedPosts) &&
-            post.relatedPosts.map((relatedPost) => (
-              <Card key={relatedPost.id} className="overflow-hidden">
-                <div className="relative aspect-video">
-                  <Image
-                    src={
-                      relatedPost.featuredImage ||
-                      "/images/placeholder-cover.jpg"
-                    }
-                    alt={relatedPost.title}
-                    fill
-                    className="object-cover"
-                  />
-                </div>
-                <div className="p-4">
-                  <h3 className="mb-2 text-lg font-semibold">
-                    <Link
-                      href={`/blog/${relatedPost.slug}`}
-                      className="hover:text-primary"
-                    >
-                      {relatedPost.title}
-                    </Link>
-                  </h3>
-                  <p className="line-clamp-2 text-sm text-muted-foreground">
-                    {relatedPost.excerpt}
-                  </p>
-                </div>
-              </Card>
-            ))}
-        </div>
+        )}
       </div>
     </div>
   );
