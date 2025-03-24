@@ -1,125 +1,104 @@
-import { NextRequest, NextResponse } from "next/server";
-import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
-import { prisma } from "./prisma";
+import NextAuth from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import { z } from "zod";
 
-// Define Role enum here instead of importing from @prisma/client
-export enum Role {
-  USER = "USER",
-  AUTHOR = "AUTHOR",
-  ADMIN = "ADMIN",
-}
+import type { User } from "@/lib/models/user";
 
-// Define a User type
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  password: string;
-  bio?: string | null;
-  avatar?: string | null;
-  role: Role;
-  createdAt: Date;
-  updatedAt: Date;
-}
+// Mock user database
+const users: User[] = [
+  {
+    id: "1",
+    name: "Admin User",
+    email: "admin@example.com",
+    password: "admin123", // In a real app, this would be hashed
+    role: "admin",
+  },
+  {
+    id: "2",
+    name: "Regular User",
+    email: "user@example.com",
+    password: "user123", // In a real app, this would be hashed
+    role: "user",
+  },
+];
 
-// Salt rounds for bcrypt
-const SALT_ROUNDS = 10;
+// Define auth config
+export const authOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        // Validate credentials
+        const parsedCredentials = z
+          .object({ email: z.string().email(), password: z.string().min(6) })
+          .safeParse(credentials);
 
-// JWT expiration time (1 week)
-const JWT_EXPIRATION = "7d";
+        if (!parsedCredentials.success) {
+          return null;
+        }
 
-// Interface for JWT payload
-export interface JwtPayload {
-  userId: string;
-  email: string;
-  role: string;
-}
+        const { email, password } = parsedCredentials.data;
 
-// Function to hash a password
-export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, SALT_ROUNDS);
-}
+        // Find the user with matching email and password
+        const user = users.find(
+          (user) => user.email === email && user.password === password
+        );
 
-// Function to compare a password with a hash
-export async function comparePassword(
-  password: string,
-  hash: string
-): Promise<boolean> {
-  return bcrypt.compare(password, hash);
-}
+        if (!user) {
+          return null;
+        }
 
-// Function to generate a JWT token
-export function generateToken(user: {
-  id: string;
-  email: string;
-  role: Role;
-}): string {
-  const payload: JwtPayload = {
-    userId: user.id,
-    email: user.email,
-    role: user.role,
-  };
+        // Return the user without the password
+        return {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          image: user.image,
+        };
+      },
+    }),
+  ],
+  callbacks: {
+    async session({ session, token }: { session: any; token: any }) {
+      // Send properties to the client
+      if (session.user && token.sub) {
+        session.user.id = token.sub;
 
-  return jwt.sign(payload, process.env.JWT_SECRET!, {
-    expiresIn: JWT_EXPIRATION,
-  });
-}
+        // Add role and other custom properties
+        const user = users.find((user) => user.id === token.sub);
+        if (user) {
+          session.user.role = user.role;
+        }
+      }
+      return session;
+    },
+    async jwt({ token, user }: { token: any; user: any }) {
+      // Pass user id and role to the token
+      if (user) {
+        token.sub = user.id;
+        token.role = user.role;
+      }
+      return token;
+    },
+  },
+  pages: {
+    signIn: "/signin",
+    error: "/signin",
+  },
+  session: {
+    strategy: "jwt" as const,
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  secret: process.env.NEXTAUTH_SECRET || "my-secret-key",
+};
 
-// Function to verify a JWT token
-export function verifyToken(token: string): JwtPayload | null {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
-  } catch (error) {
-    return null;
-  }
-}
+// Export the NextAuth handler
+export const { handlers, auth, signIn, signOut } = NextAuth(authOptions);
 
-// Middleware to protect routes
-export async function withAuth(
-  request: NextRequest,
-  handler: (req: NextRequest, user: User) => Promise<NextResponse>,
-  requiredRoles?: Role[]
-): Promise<NextResponse> {
-  try {
-    // Get the authorization header
-    const authHeader = request.headers.get("authorization");
-
-    if (!authHeader?.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get the token
-    const token = authHeader.split(" ")[1];
-
-    // Verify the token
-    const payload = verifyToken(token);
-
-    if (!payload) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get the user from the database
-    const user = await prisma.user.findUnique({
-      where: { id: payload.userId },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Check if the user has the required role
-    if (requiredRoles && !requiredRoles.includes(user.role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    // Call the handler with the authenticated user
-    return handler(request, user);
-  } catch (error) {
-    console.error("Authentication error:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
-  }
-}
+// Export a function to get the session on the server
+export const getServerSession = auth;

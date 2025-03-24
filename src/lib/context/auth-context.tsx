@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import Cookies from "js-cookie";
+import { signIn, signOut } from "next-auth/react";
 
 // Define auth user type
 export interface AuthUser {
